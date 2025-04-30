@@ -32,6 +32,8 @@ jobs:
 
           # ===== 라벨 확인 =====
           while IFS= read -r label; do
+            label=$(echo "$label" | tr '[:upper:]' '[:lower:]') # 라벨을 소문자로 변환
+          
             case "$label" in
               fe) HAS_FE=true ;;
               be) HAS_BE=true ;;
