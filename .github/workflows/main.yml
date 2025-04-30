@@ -1,0 +1,64 @@
+name: Create branch on issue creation
+
+on:
+  issues:
+    types: [opened]            # 이슈가 열릴 때마다 실행
+
+jobs:
+  create-branch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0       # 전체 히스토리 확보
+
+      - name: Install jq       # ← 추가된 단계
+        run: sudo apt-get -qq update && sudo apt-get -qq install -y jq
+
+      - name: Set up variables and create branch
+        run: |
+          # ===== 기본 설정 =====
+          BASE_BRANCH="main"                                # 기준 브랜치
+          ISSUE_NUMBER=${{ github.event.issue.number }}     # 현재 이슈 번호
+
+          # ===== 라벨 추출 =====
+          LABELS=$(jq -r '.issue.labels[].name' "$GITHUB_EVENT_PATH")
+
+          # ===== 라벨 플래그 =====
+          HAS_FE=false
+          HAS_BE=false
+
+          # ===== 라벨 확인 =====
+          while IFS= read -r label; do
+            case "$label" in
+              fe) HAS_FE=true ;;
+              be) HAS_BE=true ;;
+            esac
+          done <<< "$LABELS"
+
+          # ===== 유효성 검사 =====
+          if $HAS_FE && $HAS_BE; then
+            echo "::error ::'fe'와 'be' 라벨을 동시에 달 수 없습니다. 둘 중 하나만 선택하십시오."
+            exit 1
+          elif ! $HAS_FE && ! $HAS_BE; then
+            echo "::error ::'fe' 또는 'be' 라벨이 필요합니다. 라벨을 추가해 주세요."
+            exit 1
+          fi
+
+          # ===== 프리픽스 결정 =====
+          if $HAS_FE; then
+            PREFIX="feat/fe"
+          else
+            PREFIX="feat/be"
+          fi
+
+          # ===== 브랜치 생성 =====
+          BRANCH_NAME="${PREFIX}/${ISSUE_NUMBER}"
+          echo "Creating branch: $BRANCH_NAME"
+
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
+          git checkout -b "$BRANCH_NAME" origin/$BASE_BRANCH
+          git push origin "$BRANCH_NAME"
